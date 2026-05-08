@@ -1,0 +1,62 @@
+{
+  "id": "secr",
+  "name": "secr — Secrets management & NHI governance",
+  "description": "Brokers credentials to OpenClaw agents from secr (https://secr.dev). Enforces per-agent secret allowlists, MCP gateway rules (rate limits, allow/deny, approval-required), atomic approval-grant consumption, and full tool-call audit. Required: SECR_AGENT_TOKEN env var. See https://secr.dev/integrations/openclaw for setup.",
+  "contracts": {
+    "tools": [
+      "secr.get_secret",
+      "secr.list_envs",
+      "secr.materialize_env"
+    ]
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiUrl": {
+        "type": "string",
+        "description": "secr API base URL. Defaults to https://api.secr.dev.",
+        "default": "https://api.secr.dev"
+      },
+      "identityPath": {
+        "type": "string",
+        "description": "Path to IDENTITY.md containing the secr: frontmatter binding. Defaults to ./IDENTITY.md.",
+        "default": "./IDENTITY.md"
+      },
+      "tokenEnvVar": {
+        "type": "string",
+        "description": "Name of the env var holding the secr_agent_ token. Defaults to SECR_AGENT_TOKEN.",
+        "default": "SECR_AGENT_TOKEN"
+      },
+      "token": {
+        "type": "string",
+        "description": "secr agent token (secr_agent_...). Takes precedence over tokenEnvVar. Avoid storing in plain config; prefer the env var when possible."
+      },
+      "org": {
+        "type": "string",
+        "description": "secr org slug. If set, overrides the IDENTITY.md frontmatter binding."
+      },
+      "project": {
+        "type": "string",
+        "description": "secr project slug. If set, overrides the IDENTITY.md frontmatter binding."
+      },
+      "environment": {
+        "type": "string",
+        "description": "secr environment slug (development | staging | production | custom). If set, overrides the IDENTITY.md frontmatter binding."
+      },
+      "materializeOnStartup": {
+        "type": "boolean",
+        "description": "If true, populate process.env with allowlisted secrets when the plugin loads. Defaults to false (use the secr.materialize_env tool explicitly).",
+        "default": false
+      },
+      "enforceGateway": {
+        "type": "boolean",
+        "description": "Whether to enforce MCP gateway rules (rate limits, allow/deny, require-approval) on every tool call. Defaults to true.",
+        "default": true
+      }
+    }
+  }
+}

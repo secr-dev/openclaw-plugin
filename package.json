@@ -1,0 +1,54 @@
+{
+  "name": "@secr/openclaw-plugin",
+  "version": "0.1.0",
+  "description": "Native OpenClaw plugin — secrets broker, MCP gateway enforcement, and approval flow for OpenClaw agents. Install via `openclaw plugins install npm:@secr/openclaw-plugin` (or `clawhub:secr` once published).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "runtimeExtensions": ["./dist/index.js"]
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/secr-dev/secr",
+    "directory": "integrations/openclaw-plugin"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "clawhub",
+    "secrets",
+    "nhi",
+    "mcp",
+    "ai-agents"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@secr/openclaw": "0.1.0",
+    "@secr/sdk": "0.1.1",
+    "@secr/shared": "0.2.0",
+    "@sinclair/typebox": "^0.32.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}

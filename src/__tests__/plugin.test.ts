@@ -310,6 +310,74 @@ describe("after_tool_call hook", () => {
   });
 });
 
+describe("before_message_write content filter", () => {
+  function fakeState(values: string[]): PluginState {
+    return {
+      async getRedactionValues() { return new Set(values); },
+    } as unknown as PluginState;
+  }
+
+  it("redacts a known secret value verbatim in a string field", async () => {
+    const { buildBeforeMessageWriteHook } = await import("../message-write-hook.js");
+    const hook = buildBeforeMessageWriteHook(fakeState(["xoxb-1234567890-abcdefghijkl"]));
+    const result = await hook(
+      { message: { role: "assistant", content: "Here is the token: xoxb-1234567890-abcdefghijkl. Don't share." } },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    expect((result as any).message.content).toBe("Here is the token: [REDACTED]. Don't share.");
+  });
+
+  it("walks nested arrays + objects", async () => {
+    const { buildBeforeMessageWriteHook } = await import("../message-write-hook.js");
+    const hook = buildBeforeMessageWriteHook(fakeState(["sk_test_supersecret_long_value"]));
+    const result = await hook(
+      {
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "Calling Stripe with sk_test_supersecret_long_value..." },
+            { type: "tool_use", input: { headers: { Authorization: "Bearer sk_test_supersecret_long_value" } } },
+          ],
+        },
+      },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    const c = (result as any).message.content;
+    expect(c[0].text).toContain("[REDACTED]");
+    expect(c[1].input.headers.Authorization).toBe("Bearer [REDACTED]");
+  });
+
+  it("returns nothing when no secret value matches (no-op)", async () => {
+    const { buildBeforeMessageWriteHook } = await import("../message-write-hook.js");
+    const hook = buildBeforeMessageWriteHook(fakeState(["sk_test_supersecret_long_value"]));
+    const result = await hook(
+      { message: { role: "assistant", content: "Nothing sensitive here." } },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("respects enforceGateway=false", async () => {
+    const { buildBeforeMessageWriteHook } = await import("../message-write-hook.js");
+    const hook = buildBeforeMessageWriteHook(fakeState(["secret_value_long_enough"]));
+    const result = await hook(
+      { message: { content: "secret_value_long_enough" } },
+      { pluginConfig: { enforceGateway: false } }
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("noops when broker has no values", async () => {
+    const { buildBeforeMessageWriteHook } = await import("../message-write-hook.js");
+    const hook = buildBeforeMessageWriteHook(fakeState([]));
+    const result = await hook(
+      { message: { content: "anything" } },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    expect(result).toBeUndefined();
+  });
+});
+
 describe("registerSecrTools", () => {
   it("registers all three secr.* tools with correct names + descriptions", () => {
     const { api, tools } = makeApi("full");

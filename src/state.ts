@@ -37,7 +37,44 @@ export class PluginState {
   private gatewayInitialized = false;
   private brokerInitPromise: Promise<OpenClawSecretBroker> | null = null;
 
+  // Cached secret values for the redaction hook. Refreshed lazily; never
+  // exposed outside the plugin (only used to build a redaction set).
+  private secretValuesCache: Set<string> | null = null;
+  private secretValuesCachedAt = 0;
+  private static readonly SECRET_CACHE_TTL_MS = 5 * 60 * 1000;
+  private static readonly MIN_REDACT_VALUE_LEN = 8;
+
   constructor(private readonly config: PluginConfig) {}
+
+  /**
+   * Returns the set of secret VALUES the agent is allowed to read, suitable
+   * for content-filter redaction. Caches for 5 minutes. Excludes values
+   * shorter than 8 chars (too many false positives).
+   *
+   * Never logs values. Never returns the cache externally — callers receive
+   * a fresh Set each call so they can iterate without persisting refs.
+   */
+  async getRedactionValues(): Promise<Set<string>> {
+    const now = Date.now();
+    if (this.secretValuesCache && (now - this.secretValuesCachedAt) < PluginState.SECRET_CACHE_TTL_MS) {
+      return new Set(this.secretValuesCache);
+    }
+    try {
+      const broker = await this.getBroker();
+      const all = await broker.getAll();
+      const set = new Set<string>();
+      for (const v of Object.values(all)) {
+        if (typeof v === "string" && v.length >= PluginState.MIN_REDACT_VALUE_LEN) {
+          set.add(v);
+        }
+      }
+      this.secretValuesCache = set;
+      this.secretValuesCachedAt = now;
+      return new Set(set);
+    } catch {
+      return new Set();
+    }
+  }
 
   async getBroker(): Promise<OpenClawSecretBroker> {
     if (this.broker) return this.broker;

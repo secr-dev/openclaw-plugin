@@ -116,6 +116,11 @@ export interface OpenClawPluginApi {
     handler: AfterToolCallHandler,
     opts?: { priority?: number; timeoutMs?: number },
   ): void;
+  on(
+    event: "before_message_write",
+    handler: (event: any, ctx: any) => Promise<{ block?: boolean; message?: any } | void> | { block?: boolean; message?: any } | void,
+    opts?: { priority?: number; timeoutMs?: number },
+  ): void;
   /** Legacy: command/session InternalHookEvent registration. Different event shape. */
   registerHook?(
     events: string | string[],

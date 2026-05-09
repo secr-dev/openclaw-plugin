@@ -1,6 +1,6 @@
 {
   "name": "@secr/openclaw-plugin",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Native OpenClaw plugin — secrets broker, MCP gateway enforcement, and approval flow for OpenClaw agents. Install via `openclaw plugins install npm:@secr/openclaw-plugin` (or `clawhub:secr` once published).",
   "license": "MIT",
   "type": "module",

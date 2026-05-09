@@ -20,6 +20,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { PluginState } from "./state.js";
 import { buildToolCallHook, buildAfterToolCallHook } from "./tool-call-hook.js";
+import { buildBeforeMessageWriteHook } from "./message-write-hook.js";
 import { registerSecrTools } from "./tools.js";
 import type { OpenClawPluginApi, PluginConfig } from "./types.js";
 
@@ -65,6 +66,15 @@ export default definePluginEntry<OpenClawPluginApi>({
     api.on(
       "after_tool_call",
       buildAfterToolCallHook(state),
+      { priority: 100 },
+    );
+
+    // Defence-in-depth: redact known secret values from agent messages before
+    // they're written to the session log. Uses a 5-minute cache of the agent's
+    // allowlisted secret values (already enforced by the broker).
+    api.on(
+      "before_message_write",
+      buildBeforeMessageWriteHook(state),
       { priority: 100 },
     );
 

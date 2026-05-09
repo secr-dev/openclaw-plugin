@@ -80,6 +80,25 @@ export type BeforeToolCallHandler = (
   ctx: PluginContext,
 ) => Promise<BeforeToolCallResult | void> | BeforeToolCallResult | void;
 
+/**
+ * Fires after a tool call has executed (or failed). result + error + durationMs
+ * are populated by the runtime so plugins can record accurate audit outcomes.
+ */
+export interface AfterToolCallEvent {
+  toolName: string;
+  params: Record<string, unknown>;
+  runId?: string;
+  toolCallId?: string;
+  result?: unknown;
+  error?: string;
+  durationMs?: number;
+}
+
+export type AfterToolCallHandler = (
+  event: AfterToolCallEvent,
+  ctx: PluginContext,
+) => Promise<void> | void;
+
 export interface OpenClawPluginApi {
   registerTool(def: RegisterToolDef, opts?: { optional?: boolean }): void;
   /**
@@ -90,6 +109,11 @@ export interface OpenClawPluginApi {
   on(
     event: "before_tool_call",
     handler: BeforeToolCallHandler,
+    opts?: { priority?: number; timeoutMs?: number },
+  ): void;
+  on(
+    event: "after_tool_call",
+    handler: AfterToolCallHandler,
     opts?: { priority?: number; timeoutMs?: number },
   ): void;
   /** Legacy: command/session InternalHookEvent registration. Different event shape. */

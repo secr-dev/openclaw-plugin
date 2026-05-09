@@ -19,7 +19,7 @@
 
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { PluginState } from "./state.js";
-import { buildToolCallHook } from "./tool-call-hook.js";
+import { buildToolCallHook, buildAfterToolCallHook } from "./tool-call-hook.js";
 import { registerSecrTools } from "./tools.js";
 import type { OpenClawPluginApi, PluginConfig } from "./types.js";
 
@@ -57,6 +57,14 @@ export default definePluginEntry<OpenClawPluginApi>({
     api.on(
       "before_tool_call",
       buildToolCallHook(state),
+      { priority: 100 },
+    );
+
+    // Pair: after_tool_call records the actual outcome (success/error + duration).
+    // Without this we can only report "the tool was allowed to run", not what it did.
+    api.on(
+      "after_tool_call",
+      buildAfterToolCallHook(state),
       { priority: 100 },
     );
 

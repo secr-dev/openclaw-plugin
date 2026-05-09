@@ -166,14 +166,63 @@ export function buildToolCallHook(state: PluginState) {
       };
     }
 
-    // Allowed. The post-execution success/error report would ideally come
-    // from an `after_tool_call` hook; the OpenClaw runtime fires that with
-    // outcome+duration. Until we wire that hook, we report success here as
-    // a "started" marker.
+    // Allowed. Don't report here — the after_tool_call hook will record the
+    // actual outcome (success/error + durationMs) once the tool finishes.
+    // Reporting success here would be misleading: we'd log "success" before
+    // the tool ran, then no follow-up if it errored.
+  };
+}
+
+// ─── after_tool_call hook ────────────────────────────────────────────────────
+
+/**
+ * Records the post-execution outcome of a tool call in the secr audit trail.
+ * Pairs with buildToolCallHook (before_tool_call) — the before hook decides
+ * allow/block; this hook records what actually happened. Together they give
+ * accurate audit (current state, not predicted state).
+ *
+ * Fires for tools that ran. Tools that were blocked or denied at before_tool_call
+ * time don't reach this hook (the runtime never executes them); those are
+ * already recorded as denied / approval_required by buildToolCallHook.
+ */
+export function buildAfterToolCallHook(state: PluginState) {
+  return async (
+    event: { toolName: string; params: Record<string, unknown>; result?: unknown; error?: string; durationMs?: number },
+    ctx: { pluginConfig?: { enforceGateway?: boolean } },
+  ): Promise<void> => {
+    if (process.env.SECR_PLUGIN_DEBUG) {
+      try {
+        const fs = await import("node:fs");
+        fs.appendFileSync("/tmp/secr-plugin-debug.log",
+          JSON.stringify({
+            t: new Date().toISOString(),
+            phase: "after_tool_call",
+            toolName: event.toolName,
+            hasError: !!event.error,
+            durationMs: event.durationMs,
+          }) + "\n");
+      } catch { /* never throw from debug */ }
+    }
+
+    const cfg = ctx.pluginConfig;
+    if (cfg && cfg.enforceGateway === false) return;
+
+    const { toolName, params, result: _result, error, durationMs } = event;
+    if (toolName.startsWith("secr.")) return; // already audited by tool execute itself
+
+    let gateway;
+    try {
+      gateway = await state.getGateway();
+    } catch {
+      return; // fail open — defence-in-depth, we already passed before_tool_call
+    }
+
     gateway.reportToolCall({
       toolName,
       parameters: redactParameters(params),
-      status: "success",
+      status: error ? "error" : "success",
+      errorMessage: error,
+      durationMs,
     });
   };
 }

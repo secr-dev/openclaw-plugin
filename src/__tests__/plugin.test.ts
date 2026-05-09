@@ -209,6 +209,107 @@ describe("before_tool_call hook", () => {
   });
 });
 
+describe("after_tool_call hook", () => {
+  let originalFetch: typeof globalThis.fetch;
+  let reportedCalls: any[];
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    reportedCalls = [];
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/mcp-gateway/config")) {
+        return new Response(JSON.stringify({
+          config: { allowedTools: null, deniedTools: null, requireApprovalTools: null,
+                    requireApprovalEnvironments: null, maxRequestsPerMinute: null, maxRequestsPerHour: null },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/mcp-gateway/report")) {
+        reportedCalls.push(JSON.parse(init?.body ?? "{}"));
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+    }) as typeof globalThis.fetch;
+  });
+
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  async function buildHook() {
+    const { OpenClawSecretBroker } = await import("@secr/openclaw");
+    const { McpGateway } = await import("@secr/mcp/gateway");
+    const broker = new OpenClawSecretBroker({
+      token: "secr_agent_" + "f".repeat(48),
+      org: "acme", project: "core", environment: "production",
+      apiUrl: "http://test", useSessionTokens: false,
+    });
+    const state = {
+      async getBroker() { return broker; },
+      async getGateway() {
+        const gw = new McpGateway(broker.sdk);
+        await gw.initialize();
+        return gw;
+      },
+    } as unknown as PluginState;
+    const { buildAfterToolCallHook } = await import("../tool-call-hook.js");
+    return buildAfterToolCallHook(state);
+  }
+
+  it("reports success with durationMs when result is set", async () => {
+    const hook = await buildHook();
+    await hook(
+      { toolName: "github.create_issue", params: { repo: "acme/x" }, result: { ok: true }, durationMs: 142 },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(reportedCalls.length).toBe(1);
+    expect(reportedCalls[0].status).toBe("success");
+    expect(reportedCalls[0].durationMs).toBe(142);
+    expect(reportedCalls[0].toolName).toBe("github.create_issue");
+  });
+
+  it("reports error with errorMessage when error is set", async () => {
+    const hook = await buildHook();
+    await hook(
+      { toolName: "github.delete_repo", params: { repo: "acme/x" }, error: "Repo locked", durationMs: 27 },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(reportedCalls[0].status).toBe("error");
+    expect(reportedCalls[0].errorMessage).toBe("Repo locked");
+  });
+
+  it("redacts sensitive params before reporting", async () => {
+    const hook = await buildHook();
+    await hook(
+      { toolName: "send_request", params: { url: "https://x", token: "supersecret" }, result: "ok" },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(reportedCalls[0].parameters.token).toBe("[REDACTED]");
+    expect(reportedCalls[0].parameters.url).toBe("https://x");
+  });
+
+  it("skips secr.* tools (already audited via tool execute)", async () => {
+    const hook = await buildHook();
+    await hook(
+      { toolName: "secr.list_envs", params: {}, result: "..." },
+      { pluginConfig: { enforceGateway: true } }
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(reportedCalls.length).toBe(0);
+  });
+
+  it("respects enforceGateway=false config", async () => {
+    const hook = await buildHook();
+    await hook(
+      { toolName: "github.create_issue", params: {}, result: "ok" },
+      { pluginConfig: { enforceGateway: false } }
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(reportedCalls.length).toBe(0);
+  });
+});
+
 describe("registerSecrTools", () => {
   it("registers all three secr.* tools with correct names + descriptions", () => {
     const { api, tools } = makeApi("full");
